@@ -1,5 +1,7 @@
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
-require('dotenv').config();
+
+const token = process.env.DISCORD_TOKEN;
+const clientId = process.env.CLIENT_ID;
 
 const commands = [
   new SlashCommandBuilder().setName('facture').setDescription('🧾 Créer une facture').toJSON(),
@@ -7,13 +9,14 @@ const commands = [
   new SlashCommandBuilder().setName('aide').setDescription('❓ Aide').toJSON(),
 ];
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+const rest = new REST({ version: '10' }).setToken(token);
 
-(async () => {
-  try {
-    await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
+rest.put(Routes.applicationCommands(clientId), { body: commands })
+  .then(() => {
     console.log('✅ Commandes enregistrées !');
-  } catch (err) {
-    console.error(err);
-  }
-})();
+    process.exit(0);
+  })
+  .catch(err => {
+    console.error('❌ Erreur:', err);
+    process.exit(1);
+  });
