@@ -1,129 +1,130 @@
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const puppeteer = require('puppeteer');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
-async function generateInvoicePDF(invoiceData) {
-  const { invoiceNumber, date, dueDate, brand, client, items, subtotal, total, notes } = invoiceData;
-  const brandColor = brand?.color || '#111111';
-  const brandName = brand?.name || 'Votre Entreprise';
+module.exports = {
+    data: new SlashCommandBuilder()
+        .setName('invoice')
+        .setDescription('🧾 Génère une facture NIKE pro')
+        .addStringOption(option =>
+            option.setName('client')
+                .setDescription('Nom du client')
+                .setRequired(true))
+        .addStringOption(option =>
+            option.setName('produits')
+                .setDescription('Produits (ex: "2x Air Max 129€, 1x Dunk 120€")')
+                .setRequired(true))
+        .addStringOption(option =>
+            option.setName('numero')
+                .setDescription('Numéro facture (optionnel)')
+                .setRequired(false))
+        .addStringOption(option =>
+            option.setName('date')
+                .setDescription('Date (JJ/MM/AAAA)')
+                .setRequired(false)),
 
-  const itemRows = items.map((item, i) => `
-    <tr style="background:${i%2===0?'#ffffff':'#f5f5f5'}">
-      <td style="padding:12px 16px;border-bottom:1px solid #ddd">${item.description}</td>
-      <td style="padding:12px 16px;text-align:center;border-bottom:1px solid #ddd">${item.quantity}</td>
-      <td style="padding:12px 16px;text-align:right;border-bottom:1px solid #ddd">${item.unitPrice.toFixed(2)} EUR</td>
-      <td style="padding:12px 16px;text-align:right;font-weight:bold;border-bottom:1px solid #ddd">${(item.quantity*item.unitPrice).toFixed(2)} EUR</td>
-    </tr>`).join('');
+    async execute(interaction) {
+        await interaction.deferReply({ ephemeral: true });
 
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; background: #ffffff; color: #111111; font-size: 14px; padding: 40px; }
-  .header { background: #111111; color: #ffffff; padding: 30px 40px; display: flex; justify-content: space-between; align-items: flex-start; border-radius: 8px; margin-bottom: 0; }
-  .stripe { height: 6px; background: ${brandColor === '#111111' ? '#ffffff' : brandColor}; margin-bottom: 30px; }
-  .brand-name { font-size: 26px; font-weight: 900; letter-spacing: 2px; }
-  .tagline { font-size: 12px; color: #aaaaaa; margin-top: 4px; }
-  .invoice-num { font-size: 20px; font-weight: 700; text-align: right; }
-  .invoice-date { font-size: 11px; color: #aaaaaa; text-align: right; margin-top: 6px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-  .card { background: #f9f9f9; border: 1px solid #dddddd; border-radius: 8px; padding: 18px; }
-  .card-hl { border-left: 4px solid ${brandColor}; }
-  .card-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: ${brandColor}; font-weight: 700; margin-bottom: 8px; }
-  .card-name { font-size: 15px; font-weight: 700; margin-bottom: 6px; color: #111111; }
-  .card-info { font-size: 12px; color: #555555; line-height: 1.8; }
-  table { width: 100%; border-collapse: collapse; border-radius: 8px; overflow: hidden; border: 1px solid #dddddd; margin-bottom: 24px; }
-  thead tr { background: #111111; color: #ffffff; }
-  thead th { padding: 12px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
-  .totals { display: flex; justify-content: flex-end; margin-bottom: 24px; }
-  .totals-box { width: 280px; border: 1px solid #dddddd; border-radius: 8px; overflow: hidden; }
-  .trow { display: flex; justify-content: space-between; padding: 10px 18px; border-bottom: 1px solid #dddddd; font-size: 13px; background: #f9f9f9; }
-  .trow-total { display: flex; justify-content: space-between; padding: 14px 18px; background: #111111; color: #ffffff; }
-  .trow-total .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #aaaaaa; }
-  .trow-total .amount { font-size: 20px; font-weight: 900; }
-  .notes-box { background: #f9f9f9; border-left: 4px solid ${brandColor}; padding: 14px 18px; border-radius: 0 8px 8px 0; margin-bottom: 24px; font-size: 12px; color: #555555; line-height: 1.8; }
-  .notes-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: ${brandColor}; font-weight: 700; margin-bottom: 6px; }
-  .footer { display: flex; justify-content: space-between; font-size: 11px; color: #888888; border-top: 1px solid #dddddd; padding-top: 16px; margin-top: 10px; }
-</style>
-</head>
-<body>
-<div class="header">
-  <div>
-    <div class="brand-name">${brandName}</div>
-    ${brand && brand.tagline ? `<div class="tagline">${brand.tagline}</div>` : ''}
-  </div>
-  <div>
-    <div class="invoice-num">FACTURE #${invoiceNumber}</div>
-    <div class="invoice-date">Emise le ${date}<br>Echeance ${dueDate}</div>
-  </div>
-</div>
-<div class="stripe"></div>
-<div class="grid">
-  <div class="card card-hl">
-    <div class="card-label">Emetteur</div>
-    <div class="card-name">${brandName}</div>
-    <div class="card-info">
-      ${(brand && brand.address ? brand.address : '').replace(/\n/g,'<br>')}
-      ${brand && brand.email ? '<br>' + brand.email : ''}
-      ${brand && brand.phone ? '<br>' + brand.phone : ''}
-      ${brand && brand.siret ? '<br>SIRET: ' + brand.siret : ''}
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-label">Facture a</div>
-    <div class="card-name">${client.name}</div>
-    <div class="card-info">
-      ${client.address.replace(/\n/g,'<br>')}
-      ${client.email ? '<br>' + client.email : ''}
-    </div>
-  </div>
-</div>
-<table>
-  <thead>
-    <tr>
-      <th style="text-align:left">Description</th>
-      <th style="text-align:center">Qte</th>
-      <th style="text-align:right">Prix unitaire</th>
-      <th style="text-align:right">Total HT</th>
-    </tr>
-  </thead>
-  <tbody>${itemRows}</tbody>
-</table>
-<div class="totals">
-  <div class="totals-box">
-    <div class="trow"><span>Sous-total HT</span><span>${subtotal.toFixed(2)} EUR</span></div>
-    <div class="trow"><span>TVA (0%)</span><span>0.00 EUR</span></div>
-    <div class="trow-total"><span class="label">Total TTC</span><span class="amount">${total.toFixed(2)} EUR</span></div>
-  </div>
-</div>
-${notes ? `<div class="notes-box"><div class="notes-label">Notes</div>${notes.replace(/\n/g,'<br>')}</div>` : ''}
-<div class="footer">
-  <span>${brandName}</span>
-  <span>Facture N ${invoiceNumber} — ${date}</span>
-</div>
-</body>
-</html>`;
+        const client = interaction.options.getString('client');
+        const produits = interaction.options.getString('produits');
+        const numero = interaction.options.getString('numero') || `NIKE-${Date.now().toString().slice(-6)}`;
+        const dateInput = interaction.options.getString('date') || new Date().toLocaleDateString('fr-FR');
+        
+        // Parsing produits
+        const productLines = produits.split(',').map(line => line.trim());
+        let subtotal = 0;
+        let productsTable = '';
 
-  const tmpDir = path.join(os.tmpdir(), 'discord-invoices');
-  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-  const outputPath = path.join(tmpDir, 'facture-' + invoiceNumber + '.pdf');
+        productLines.forEach(line => {
+            const match = line.match(/(\d+)x?\s*(.+?)\s*(\d+(?:[.,]\d+)?)€?/i);
+            if (match) {
+                const [, qty, name, priceStr] = match;
+                const qtyNum = parseFloat(qty) || 1;
+                const price = parseFloat(priceStr.replace(',', '.')) || 0;
+                const total = qtyNum * price;
+                subtotal += total;
+                
+                productsTable += `**${name.trim()}** ×${qtyNum} | €${price.toFixed(2).replace('.', ',')} | **€${total.toFixed(2).replace('.', ',')}**\n`;
+            }
+        });
 
-  const browser = await puppeteer.launch({
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
-  const page = await browser.newPage();
-  await page.setContent(html, { waitUntil: 'networkidle0' });
-  await page.pdf({
-    path: outputPath,
-    format: 'A4',
-    printBackground: true,
-    margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' }
-  });
-  await browser.close();
-  return outputPath;
-}
+        const tva = subtotal * 0.20;
+        const total = subtotal + tva;
 
-module.exports = { generateInvoicePDF };
+        // Embed NIKE pro
+        const embed = new EmbedBuilder()
+            .setColor('#E4002B')
+            .setTitle('🏃‍♂️ **FACTURE NIKE**', 'https://www.nike.com/fr/')
+            .setDescription('**NIKE FRANCE SAS** | 123 Champs-Élysées, 75008 Paris')
+            .setThumbnail('https://i.imgur.com/nike-logo.png') // Remplace par vrai logo
+            .addFields(
+                { 
+                    name: '📋 FACTURÉ À', 
+                    value: `**${client}**\n📍 Paris, France`, 
+                    inline: true 
+                },
+                { 
+                    name: '📅 Infos', 
+                    value: `**N° ${numero}**\n**Date:** ${dateInput}`, 
+                    inline: true 
+                },
+                { 
+                    name: '👟 PRODUITS', 
+                    value: productsTable || 'Aucun produit', 
+                    inline: false 
+                },
+                { 
+                    name: '💰 TOTALS', 
+                    value: `
+**Sous-total HT**   €${subtotal.toFixed(2).replace('.', ',')}
+**TVA 20%**        €${tva.toFixed(2).replace('.', ',')}
+┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈
+**TOTAL TTC**  **€${total.toFixed(2).replace('.', ',')}**
+                    `,
+                    inline: false 
+                },
+                { 
+                    name: '💳 PAIEMENT', 
+                    value: `**30 jours net**\n\`IBAN: FR76 3000 0000 0000 0000 0000 123\``, 
+                    inline: true 
+                }
+            )
+            .setFooter({ 
+                text: 'NIKE ✓ Just Do It', 
+                iconURL: 'https://i.imgur.com/nike-icon.png' 
+            })
+            .setTimestamp();
+
+        // Boutons
+        const row = {
+            type: 1,
+            components: [
+                {
+                    type: 2,
+                    label: '🖨️ PDF',
+                    style: 5,
+                    url: `https://invoice.nike.fr/${numero}` // Lien fictif
+                },
+                {
+                    type: 2,
+                    label: '➕ Dupliquer',
+                    style: 1,
+                    custom_id: 'duplicate_invoice'
+                }
+            ]
+        };
+
+        await interaction.editReply({ 
+            embeds: [embed], 
+            components: [row],
+            ephemeral: false 
+        });
+    }
+};
+
+// Event pour bouton dupliquer
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isButton()) return;
+    if (interaction.customId === 'duplicate_invoice') {
+        await interaction.reply({ content: '🔄 Facture dupliquée ! Utilise `/invoice` pour créer une nouvelle.', ephemeral: true });
+    }
+});
