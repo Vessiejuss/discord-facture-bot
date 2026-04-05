@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const puppeteer = require('puppeteer');
 
 async function generateInvoicePDF(invoiceData) {
   const { invoiceNumber, date, dueDate, brand, client, items, subtotal, total, notes } = invoiceData;
@@ -60,7 +61,6 @@ async function generateInvoicePDF(invoiceData) {
   </div>
 </div>
 <div class="stripe"></div>
-
 <div class="grid">
   <div class="card card-hl">
     <div class="card-label">Emetteur</div>
@@ -81,7 +81,6 @@ async function generateInvoicePDF(invoiceData) {
     </div>
   </div>
 </div>
-
 <table>
   <thead>
     <tr>
@@ -93,7 +92,6 @@ async function generateInvoicePDF(invoiceData) {
   </thead>
   <tbody>${itemRows}</tbody>
 </table>
-
 <div class="totals">
   <div class="totals-box">
     <div class="trow"><span>Sous-total HT</span><span>${subtotal.toFixed(2)} EUR</span></div>
@@ -101,9 +99,7 @@ async function generateInvoicePDF(invoiceData) {
     <div class="trow-total"><span class="label">Total TTC</span><span class="amount">${total.toFixed(2)} EUR</span></div>
   </div>
 </div>
-
 ${notes ? `<div class="notes-box"><div class="notes-label">Notes</div>${notes.replace(/\n/g,'<br>')}</div>` : ''}
-
 <div class="footer">
   <span>${brandName}</span>
   <span>Facture N ${invoiceNumber} — ${date}</span>
@@ -113,8 +109,20 @@ ${notes ? `<div class="notes-box"><div class="notes-label">Notes</div>${notes.re
 
   const tmpDir = path.join(os.tmpdir(), 'discord-invoices');
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-  const outputPath = path.join(tmpDir, 'facture-' + invoiceNumber + '.html');
-  fs.writeFileSync(outputPath, html, 'utf-8');
+  const outputPath = path.join(tmpDir, 'facture-' + invoiceNumber + '.pdf');
+
+  const browser = await puppeteer.launch({
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+  await page.pdf({
+    path: outputPath,
+    format: 'A4',
+    printBackground: true,
+    margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' }
+  });
+  await browser.close();
   return outputPath;
 }
 
