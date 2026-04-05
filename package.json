@@ -1,14 +1,17 @@
 {
-  "name": "discord-invoice-bot",
+  "name": "nike-invoice-discord",
   "version": "1.0.0",
-  "main": "bot.js",
+  "description": "invoiceGenerator NIKE Discord Bot",
+  "main": "index.js",
   "scripts": {
-    "start": "node bot.js",
+    "start": "node index.js",
     "deploy": "node deploy-commands.js"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
-    "dotenv": "^16.3.1",
-    "puppeteer": "^22.0.0"
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }
