@@ -1,22 +1,27 @@
-const { REST, Routes, SlashCommandBuilder } = require('discord.js');
+require('dotenv').config();
+const { REST, Routes } = require('discord.js');
+const fs = require('fs');
 
-const token = process.env.DISCORD_TOKEN;
-const clientId = process.env.CLIENT_ID;
+const commands = [];
+const commandsFolder = './commands';
 
-const commands = [
-  new SlashCommandBuilder().setName('facture').setDescription('🧾 Créer une facture').toJSON(),
-  new SlashCommandBuilder().setName('config-marque').setDescription('🏢 Configurer votre marque').toJSON(),
-  new SlashCommandBuilder().setName('aide').setDescription('❓ Aide').toJSON(),
-];
+fs.readdirSync(commandsFolder).forEach(file => {
+    if (file.endsWith('.js')) {
+        const command = require(`./commands/${file}`);
+        commands.push(command.data.toJSON());
+    }
+});
 
-const rest = new REST({ version: '10' }).setToken(token);
+const rest = new REST().setToken(process.env.DISCORD_TOKEN);
 
-rest.put(Routes.applicationCommands(clientId), { body: commands })
-  .then(() => {
-    console.log('✅ Commandes enregistrées !');
-    process.exit(0);
-  })
-  .catch(err => {
-    console.error('❌ Erreur:', err);
-    process.exit(1);
-  });
+(async () => {
+    try {
+        await rest.put(
+            Routes.applicationCommands(process.env.CLIENT_ID),
+            { body: commands },
+        );
+        console.log('✅ Commandes globales déployées!');
+    } catch (error) {
+        console.error(error);
+    }
+})();
