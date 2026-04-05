@@ -1,6 +1,6 @@
-const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
-const fs = require('fs');
 require('dotenv').config();
+const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const fs = require('fs');
 
 const client = new Client({ 
     intents: [GatewayIntentBits.Guilds] 
@@ -8,42 +8,35 @@ const client = new Client({
 
 client.commands = new Collection();
 
-const commands = [];
-const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+const commandsPath = './commands';
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
 for (const file of commandFiles) {
-    const command = require(`./commands/${file}`);
+    const filePath = `${commandsPath}/${file}`;
+    const command = require(filePath);
     client.commands.set(command.data.name, command);
-    commands.push(command.data.toJSON());
 }
 
-client.once('ready', async () => {
-    console.log(`✅ ${client.user.tag} connecté!`);
-    
-    // Déploie les commandes
-    const rest = new REST().setToken(process.env.DISCORD_TOKEN);
-    try {
-        await rest.put(
-            Routes.applicationCommands(process.env.CLIENT_ID),
-            { body: commands }
-        );
-        console.log('✅ Commandes slash déployées!');
-    } catch (error) {
-        console.error(error);
-    }
+client.once('ready', () => {
+    console.log(`✅ ${client.user.tag} en ligne!`);
 });
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
-
+    
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
-
+    
     try {
         await command.execute(interaction);
     } catch (error) {
         console.error(error);
-        await interaction.reply({ content: '❌ Erreur commande!', ephemeral: true });
+        const reply = { content: '❌ Erreur!', ephemeral: true };
+        if (interaction.replied || interaction.deferred) {
+            await interaction.followUp(reply);
+        } else {
+            await interaction.reply(reply);
+        }
     }
 });
 
